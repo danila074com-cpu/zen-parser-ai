@@ -1,0 +1,104 @@
+name: Zen Parser
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  parse-articles:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: ⎔ Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: 📦 Install dependencies
+      run: |
+        echo "=== ОЧИСТКА КЭША И ПЕРЕУСТАНОВКА ==="
+        npm cache clean --force
+        rm -rf node_modules
+        rm -f package-lock.json
+        echo "=== УСТАНОВКА ЗАВИСИМОСТЕЙ ==="
+        npm install
+        echo "=== ПРОВЕРКА УСТАНОВКИ ==="
+        npm list --depth=0
+        
+    - name: 🔍 Debug - Check environment
+      run: |
+        echo "=== ПРОВЕРКА СРЕДЫ ==="
+        echo "Node version: $(node --version)"
+        echo "NPM version: $(npm --version)"
+        echo "Текущая папка: $(pwd)"
+        echo "Содержимое:"
+        ls -la
+        echo "Проверка parser.js:"
+        ls -la parser.js
+        echo "Проверка AI скрипта:"
+        ls -la scripts/process-with-ai.js || echo "AI скрипт не найден"
+        
+    - name: 🚀 Run parser
+      run: |
+        echo "=== ЗАПУСК PARSER ==="
+        node parser.js
+        
+    - name: 🤖 AI Обработка статей
+      run: |
+        echo "=== ЗАПУСК AI ОБРАБОТКИ ==="
+        echo "🤖 Используем модель: GPT-3.5 Turbo"
+        echo "📝 Обрабатываем статьи через OpenAI..."
+        node scripts/process-with-ai.js
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        
+    - name: 📂 Check results
+      run: |
+        echo "=== ПРОВЕРКА РЕЗУЛЬТАТОВ ==="
+        find . -name "*.xlsx" -o -name "*.csv" 2>/dev/null || echo "Excel файлы не найдены"
+        ls -la results/ 2>/dev/null || echo "Папка results не найдена"
+        ls -la processed/ 2>/dev/null || echo "Папка processed не найдена"
+        
+        if [ -d "results/" ]; then
+          echo "📁 Содержимое results:"
+          ls -la results/
+          find results/ -type f -name "*.xlsx"
+        fi
+        
+        if [ -d "processed/" ]; then
+          echo "🤖 Содержимое processed:"
+          ls -la processed/
+          find processed/ -type f -name "*.xlsx"
+        fi
+        
+    - name: 💾 Upload results
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: zen-articles
+        path: |
+          results/
+          processed/
+        retention-days: 30
+        
+    - name: 📊 Display success
+      if: success()
+      run: |
+        echo "✅ Парсинг успешно завершен!"
+        echo "🤖 AI обработка выполнена!"
+        echo "📁 Файлы сохранены в артефактах:"
+        echo "   - results/ - оригинальные статьи"
+        echo "   - processed/ - уникализированные AI статьи"
+        echo "⏰ Время: $(date)"
+        
+    - name: 🐛 Display failure info
+      if: failure()
+      run: |
+        echo "❌ Процесс завершился с ошибкой"
+        echo "🔍 Проверьте логи выше для диагностики"
+        echo "⏰ Время: $(date)"

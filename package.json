@@ -1,0 +1,19 @@
+{
+  "name": "zen-parser",
+  "version": "1.0.0",
+  "description": "Парсер статей с автоматической обработкой через AI",
+  "main": "parser.js",
+  "scripts": {
+    "start": "node parser.js",
+    "process": "node scripts/process-with-ai.js",
+    "full-pipeline": "node parser.js && node scripts/process-with-ai.js"
+  },
+  "dependencies": {
+    "puppeteer": "^20.9.0",
+    "exceljs": "^4.4.0",
+    "openai": "^4.20.0"
+  },
+  "keywords": ["parser", "ai", "articles", "automation"],
+  "author": "Your Name",
+  "license": "MIT"
+}
