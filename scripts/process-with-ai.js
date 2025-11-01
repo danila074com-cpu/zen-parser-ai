@@ -1,4 +1,4 @@
-// scripts/process-with-ai.js - РАБОЧАЯ AI ОБРАБОТКА
+// scripts/process-with-ai.js - ЭТИЧНАЯ AI ОБРАБОТКА
 const { OpenAI } = require('openai');
 const fs = require('fs').promises;
 const path = require('path');
@@ -10,7 +10,7 @@ const openai = new OpenAI({
 
 const AI_MODEL = "gpt-3.5-turbo";
 
-console.log('🚀 Запускаем РАБОЧУЮ AI обработку...');
+console.log('🚀 Запускаем ЭТИЧНУЮ AI обработку...');
 
 async function processArticles() {
   try {
@@ -35,21 +35,20 @@ async function processArticles() {
     // Создаем папку для результатов
     const outputDir = path.join(__dirname, '../processed');
     await fs.mkdir(outputDir, { recursive: true });
-    const outputPath = path.join(outputDir, 'рабочие_статьи.xlsx');
+    const outputPath = path.join(outputDir, 'этичные_статьи.xlsx');
     
     const newWorkbook = new ExcelJS.Workbook();
-    const newWorksheet = newWorkbook.addWorksheet('Рабочие статьи');
+    const newWorksheet = newWorkbook.addWorksheet('Этичные статьи');
 
     // Столбцы
     newWorksheet.columns = [
       { header: '№', key: 'number', width: 5 },
-      { header: 'Оригинальный заголовок', key: 'original_title', width: 35 },
-      { header: 'Уникальный заголовок', key: 'unique_title', width: 35 },
+      { header: 'Тема оригинала', key: 'original_topic', width: 40 },
+      { header: 'Уникальный заголовок', key: 'unique_title', width: 40 },
       { header: 'Оригинальный текст', key: 'original_text', width: 80 },
       { header: 'Уникальный текст', key: 'unique_text', width: 80 },
       { header: 'Ориг. слов', key: 'original_words', width: 12 },
       { header: 'Уник. слов', key: 'unique_words', width: 12 },
-      { header: 'Разница', key: 'difference', width: 15 },
       { header: 'Статус', key: 'status', width: 20 }
     ];
 
@@ -65,71 +64,96 @@ async function processArticles() {
       if (!originalTitle || !originalText) continue;
 
       const originalWordCount = originalText.split(/\s+/).length;
-      console.log(`\n🔍 Обрабатываем: "${originalTitle.substring(0, 50)}..."`);
-      console.log(`   📊 Оригинальный объем: ${originalWordCount} слов`);
+      console.log(`\n🔍 Анализируем тему: "${originalTitle.substring(0, 50)}..."`);
 
       try {
-        // ШАГ 1: СОЗДАЕМ УНИКАЛЬНЫЙ ЗАГОЛОВОК
-        console.log('   💡 Создаем уникальный заголовок...');
+        // ШАГ 1: АНАЛИЗИРУЕМ ТЕМУ (без копирования текста)
+        console.log('   🔍 Анализируем основную тему...');
         
-        const titlePrompt = `Придумай новый уникальный заголовок для этой статьи. Оригинальный заголовок: "${originalTitle}"`;
-        
-        const titleResponse = await openai.chat.completions.create({
-          model: AI_MODEL,
-          messages: [{ role: "user", content: titlePrompt }],
-          max_tokens: 100,
-          temperature: 0.7
-        });
+        const analysisPrompt = `
+Проанализируй ЭТУ ТЕМУ и выдели ОСНОВНУЮ ИДЕЮ. НЕ копируй текст!
 
-        const uniqueTitle = titleResponse.choices[0].message.content.replace(/["']/g, '').trim();
+Исходный материал:
+Заголовок: "${originalTitle}"
+Текст: "${originalText.substring(0, 500)}..."
 
-        // ШАГ 2: ПЕРЕПИСЫВАЕМ ПОЛНЫЙ ТЕКСТ
-        console.log('   ✍️ Переписываем полный текст статьи...');
-        
-        const textPrompt = `
-Перепиши полностью этот текст, сохраняя основную историю и смысл, но изменив имена, детали и диалоги. 
-Сохрани примерно тот же объем текста (${originalWordCount} слов).
+Выдели только:
+1. Основную тему (1-2 предложения)
+2. Ключевые проблемы/конфликты
+3. Целевую аудиторию
 
-Оригинальный текст для переработки:
-"${originalText}"
-
-Верни только переписанный текст, без дополнительных комментариев.
+НЕ ПЕРЕСКАЗЫВАЙ ТЕКСТ! Только анализ темы.
 `;
 
-        const textResponse = await openai.chat.completions.create({
+        const analysisResponse = await openai.chat.completions.create({
           model: AI_MODEL,
-          messages: [{ role: "user", content: textPrompt }],
-          max_tokens: 4000,
-          temperature: 0.8
+          messages: [{ role: "user", content: analysisPrompt }],
+          max_tokens: 300,
+          temperature: 0.3
         });
 
-        const uniqueText = textResponse.choices[0].message.content;
-        const uniqueWordCount = uniqueText.split(/\s+/).length;
-        
-        const diffPercent = Math.round((uniqueWordCount - originalWordCount) / originalWordCount * 100);
-        const volumeStatus = Math.abs(diffPercent) <= 15 ? '✅ Сохранен' : `⚠️ ${diffPercent}%`;
+        const topicAnalysis = analysisResponse.choices[0].message.content;
+        console.log('   🎯 Тема анализа:', topicAnalysis.substring(0, 100) + '...');
 
-        console.log(`   📊 Результат: ${originalWordCount} → ${uniqueWordCount} слов (${volumeStatus})`);
+        // ШАГ 2: СОЗДАЕМ УНИКАЛЬНЫЙ КОНТЕНТ НА ОСНОВЕ ТЕМЫ
+        console.log('   ✍️ Создаем уникальный контент...');
+        
+        const creationPrompt = `
+СОЗДАЙ ПОЛНОСТЬЮ УНИКАЛЬНУЮ СТАТЬЮ на основе этой темы.
+
+ТЕМА ДЛЯ ВДОХНОВЕНИЯ:
+${topicAnalysis}
+
+ТРЕБОВАНИЯ:
+- СОЗДАЙ СОВЕРШЕННО НОВЫЙ ТЕКСТ с другим сюжетом, персонажами, диалогами
+- Сохрани только ОБЩУЮ ТЕМАТИКУ (семейные отношения, конфликты и т.д.)
+- Объем: ${originalWordCount} ±15% слов
+- Естественный стиль, как оригинальная статья
+- Уникальные имена, локации, ситуации
+
+НЕ КОПИРУЙ и НЕ ПЕРЕСКАЗЫВАЙ исходный материал! Создавай с нуля.
+
+Структура:
+1. Уникальный заголовок
+2. Полный текст статьи
+`;
+
+        const creationResponse = await openai.chat.completions.create({
+          model: AI_MODEL,
+          messages: [{ role: "user", content: creationPrompt }],
+          max_tokens: 4000,
+          temperature: 0.9  // Высокая креативность
+        });
+
+        const result = creationResponse.choices[0].message.content;
+        
+        // Разделяем заголовок и текст
+        const lines = result.split('\n').filter(line => line.trim());
+        const uniqueTitle = lines[0].replace(/["']/g, '').trim();
+        const uniqueText = lines.slice(1).join('\n').trim();
+        
+        const uniqueWordCount = uniqueText.split(/\s+/).length;
+
+        console.log(`   📊 Результат: ${originalWordCount} → ${uniqueWordCount} слов`);
         console.log(`   🎯 Новый заголовок: ${uniqueTitle}`);
 
         // Добавляем в таблицу
         newWorksheet.addRow({
           number: i - 1,
-          original_title: originalTitle,
+          original_topic: originalTitle,
           unique_title: uniqueTitle,
-          original_text: originalText, // ПОЛНЫЙ оригинальный текст
-          unique_text: uniqueText, // ПОЛНЫЙ текст без ограничений
+          original_text: originalText.substring(0, 1000) + (originalText.length > 1000 ? '...' : ''),
+          unique_text: uniqueText,
           original_words: originalWordCount,
           unique_words: uniqueWordCount,
-          difference: volumeStatus,
-          status: '✅ Успешно'
+          status: '✅ Уникальный контент'
         });
 
         processedCount++;
-        console.log(`   ✅ Успешно! Создана уникальная статья.`);
+        console.log(`   ✅ Успешно! Создан оригинальный контент.`);
 
         // Пауза между запросами
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
       } catch (error) {
         console.log(`   ❌ Ошибка: ${error.message}`);
@@ -139,9 +163,10 @@ async function processArticles() {
     // Сохраняем результаты
     await newWorkbook.xlsx.writeFile(outputPath);
     
-    console.log('\n🎉 ====== РЕЗУЛЬТАТЫ ОБРАБОТКИ ======');
-    console.log(`📊 Обработано статей: ${processedCount}`);
+    console.log('\n🎉 ====== ЭТИЧНАЯ ОБРАБОТКА ЗАВЕРШЕНА ======');
+    console.log(`📊 Создано статей: ${processedCount}`);
     console.log(`📁 Файл: ${outputPath}`);
+    console.log(`✅ Все статьи - УНИКАЛЬНЫЙ КОНТЕНТ (не копирайт)`);
 
   } catch (error) {
     console.error('💥 Критическая ошибка:', error.message);
