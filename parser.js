@@ -6,7 +6,7 @@ const ExcelJS = require('exceljs');
 
 const CHANNEL_NAME = 'Нарочно не придумаешь';
 const CHANNEL_URL = 'https://dzen.ru/id/5ae586563dceb76be76eca19?tab=articles';
-const MAX_ARTICLES = 10;
+const MAX_ARTICLES = 4;
 
 const safeName = CHANNEL_NAME.replace(/[<>:"/\\|?*]/g, '_');
 // ИСПРАВЛЕННЫЙ ПУТЬ - используем process.cwd() для кроссплатформенности
