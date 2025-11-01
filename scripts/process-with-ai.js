@@ -1,77 +1,60 @@
-// scripts/process-with-ai.js - ПОЛНАЯ AI ОБРАБОТКА
+// scripts/process-with-ai.js - КАЧЕСТВЕННАЯ AI ОБРАБОТКА
 const { OpenAI } = require('openai');
 const fs = require('fs').promises;
 const path = require('path');
 const ExcelJS = require('exceljs');
 
-// Инициализируем OpenAI (ключ будем передавать через переменную окружения)
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Выбираем версию ChatGPT
 const AI_MODEL = "gpt-3.5-turbo";
 
-console.log('🚀 Запускаем ПОЛНУЮ AI обработку статей...');
-console.log(`🤖 Используем модель: ${AI_MODEL}`);
+console.log('🚀 Запускаем КАЧЕСТВЕННУЮ AI обработку...');
 
 async function processArticles() {
   try {
-    // 1. Проверяем API ключ
     if (!process.env.OPENAI_API_KEY) {
       console.log('❌ OpenAI API ключ не найден!');
-      console.log('💡 Как запустить:');
-      console.log('   OPENAI_API_KEY="твой-ключ" node scripts/process-with-ai.js');
       return;
     }
 
-    // 2. Проверяем исходные статьи
     const inputPath = path.join(__dirname, '../results/Статьи Дзен/Нарочно не придумаешь/Нарочно не придумаешь_articles.xlsx');
     
     console.log('📁 Проверяем файл со статьями...');
-    
-    try {
-      await fs.access(inputPath);
-      console.log('✅ Файл со статьей найден!');
-    } catch (error) {
-      console.log('❌ Файл со статьями не найден! Сначала запусти парсер:');
-      console.log('   node parser.js');
-      return;
-    }
+    await fs.access(inputPath);
+    console.log('✅ Файл со статьей найден!');
 
-    // 3. Читаем Excel файл
+    // Читаем Excel файл
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(inputPath);
-    
     const worksheet = workbook.getWorksheet('Articles');
     const totalArticles = worksheet.rowCount - 1;
     console.log(`📊 Найдено статей: ${totalArticles}`);
 
-    // 4. Создаем папку для результатов
+    // Создаем папку для результатов
     const outputDir = path.join(__dirname, '../processed');
     await fs.mkdir(outputDir, { recursive: true });
+    const outputPath = path.join(outputDir, 'качественные_статьи.xlsx');
     
-    const outputPath = path.join(outputDir, 'уникализированные_статьи.xlsx');
     const newWorkbook = new ExcelJS.Workbook();
-    const newWorksheet = newWorkbook.addWorksheet('AI Обработанные статьи');
+    const newWorksheet = newWorkbook.addWorksheet('Качественные статьи');
 
-    // 5. Создаем расширенные заголовки
+    // Столбцы с полным текстом
     newWorksheet.columns = [
       { header: '№', key: 'number', width: 5 },
       { header: 'Оригинальный заголовок', key: 'original_title', width: 35 },
       { header: 'Уникальный заголовок', key: 'unique_title', width: 35 },
-      { header: 'Ключевые темы', key: 'themes', width: 25 },
-      { header: 'Тональность', key: 'tone', width: 15 },
-      { header: 'Ориг. объем (слов)', key: 'original_words', width: 18 },
-      { header: 'Уник. объем (слов)', key: 'unique_words', width: 18 },
+      { header: 'Оригинальный текст', key: 'original_text', width: 80 },
+      { header: 'Уникальный текст', key: 'unique_text', width: 80 },
+      { header: 'Ориг. слов', key: 'original_words', width: 12 },
+      { header: 'Уник. слов', key: 'unique_words', width: 12 },
+      { header: 'Разница', key: 'difference', width: 15 },
       { header: 'Статус', key: 'status', width: 20 }
     ];
 
-    // 6. ОБРАБАТЫВАЕМ СТАТЬИ ЧЕРЕЗ AI
+    // Обрабатываем 1 статью для теста
     let processedCount = 0;
-    let failedCount = 0;
-
-    // Обрабатываем только 1 статью для первого теста (экономия денег)
     const maxArticles = 1;
 
     for (let i = 2; i <= Math.min(worksheet.rowCount, maxArticles + 1); i++) {
@@ -82,138 +65,96 @@ async function processArticles() {
       if (!originalTitle || !originalText) continue;
 
       const originalWordCount = originalText.split(/\s+/).length;
-      console.log(`\n🔍 [${i-1}/${maxArticles}] Обрабатываем: "${originalTitle.substring(0, 40)}..."`);
+      console.log(`\n🔍 Обрабатываем: "${originalTitle.substring(0, 50)}..."`);
       console.log(`   📊 Оригинальный объем: ${originalWordCount} слов`);
 
       try {
-        // ШАГ 1: Создаем уникальный заголовок через AI
-        console.log('   💡 Создаем уникальный заголовок...');
+        // КАЧЕСТВЕННЫЙ ПРОМПТ ДЛЯ СОЗДАНИЯ УНИКАЛЬНОГО КОНТЕНТА
+        const qualityPrompt = `
+ТЫ: профессиональный копирайтер и редактор
+ЗАДАЧА: создать полностью новый уникальный текст на основе исходной статьи
+ЦЕЛЬ: сохранить основную идею и объем, но изменить всё остальное
+
+ТРЕБОВАНИЯ К НОВОМУ ТЕКСТУ:
+1. Сохрани ОСНОВНУЮ ИДЕЮ и ценность оригинала
+2. Сохрани ПРИМЕРНО ТОТ ЖЕ ОБЪЕМ слов (±15%)
+3. ИЗМЕНИ полностью: сюжет, имена героев, локации, диалоги
+4. ДОБАВЬ новые детали, примеры, эмоции
+5. Сделай текст ЕСТЕСТВЕННЫМ и читабельным
+6. Заголовок должен отражать суть, но быть другим
+
+ФОРМАТ ОТВЕТА:
+ЗАГОЛОВОК: [новый уникальный заголовок]
+ТЕКСТ: [полный переписанный текст]
+
+ИСХОДНЫЙ МАТЕРИАЛ:
+ЗАГОЛОВОК: "${originalTitle}"
+ТЕКСТ: "${originalText.substring(0, 3000)}"
+`;
+
+        console.log('   ✍️ Создаем качественный уникальный контент...');
         
-        const titlePrompt = `
-Придумай новый привлекательный заголовок для этой статьи. 
-Заголовок должен быть уникальным, но передавать ту же суть.
-
-Оригинальный заголовок: "${originalTitle}"
-
-Новый заголовок:
-        `;
-
-        const titleResponse = await openai.chat.completions.create({
+        const response = await openai.chat.completions.create({
           model: AI_MODEL,
-          messages: [{ role: "user", content: titlePrompt }],
-          max_tokens: 100,
-          temperature: 0.7
-        });
-
-        const uniqueTitle = titleResponse.choices[0].message.content.replace(/["']/g, '').trim();
-
-        // ШАГ 2: Уникализируем весь текст статьи
-        console.log('   ✍️ Уникализируем текст статьи...');
-        
-        const textPrompt = `
-Перепиши этот текст, сохраняя основные идеи и смысл, но изменив формулировки и стиль.
-Старайся сохранить примерно тот же объем текста.
-
-Оригинальный текст:
-"${originalText.substring(0, 2000)}"
-
-Уникализированный текст:
-        `;
-
-        const textResponse = await openai.chat.completions.create({
-          model: AI_MODEL,
-          messages: [{ role: "user", content: textPrompt }],
-          max_tokens: 2500,
+          messages: [{ role: "user", content: qualityPrompt }],
+          max_tokens: 4000,
           temperature: 0.8
         });
 
-        const uniqueText = textResponse.choices[0].message.content;
-        const uniqueWordCount = uniqueText.split(/\s+/).length;
-
-        console.log(`   📊 Результат: ${originalWordCount} → ${uniqueWordCount} слов`);
-
-        // ШАГ 3: Анализируем статью
-        console.log('   📝 Анализируем статью...');
+        const result = response.choices[0].message.content;
         
-        const analysisPrompt = `
-Проанализируй эту статью и выдели основные темы и тональность.
+        // Парсим результат
+        const uniqueTitle = extractValue(result, 'ЗАГОЛОВОК');
+        const uniqueText = extractValue(result, 'ТЕКСТ');
+        const uniqueWordCount = uniqueText.split(/\s+/).length;
+        
+        const diffPercent = Math.round((uniqueWordCount - originalWordCount) / originalWordCount * 100);
+        const volumeStatus = Math.abs(diffPercent) <= 15 ? '✅ Сохранен' : `⚠️ ${diffPercent}%`;
 
-Текст: "${uniqueText.substring(0, 1000)}"
+        console.log(`   📊 Результат: ${originalWordCount} → ${uniqueWordCount} слов (${volumeStatus})`);
+        console.log(`   🎯 Новый заголовок: ${uniqueTitle}`);
 
-Ответь в формате:
-Темы: тема1, тема2, тема3
-Тональность: позитивная/негативная/нейтральная
-        `;
-
-        const analysisResponse = await openai.chat.completions.create({
-          model: AI_MODEL,
-          messages: [{ role: "user", content: analysisPrompt }],
-          max_tokens: 200,
-          temperature: 0.3
-        });
-
-        const analysis = analysisResponse.choices[0].message.content;
-        const themes = extractThemes(analysis);
-        const tone = extractTone(analysis);
-
-        // Добавляем результат в таблицу
+        // Добавляем в таблицу
         newWorksheet.addRow({
           number: i - 1,
           original_title: originalTitle,
           unique_title: uniqueTitle,
-          themes: themes.join(', '),
-          tone: tone,
+          original_text: originalText.substring(0, 1500) + (originalText.length > 1500 ? '...' : ''),
+          unique_text: uniqueText,
           original_words: originalWordCount,
           unique_words: uniqueWordCount,
+          difference: volumeStatus,
           status: '✅ Успешно'
         });
 
         processedCount++;
-        console.log(`   ✅ Успешно! Новый заголовок: ${uniqueTitle}`);
-        console.log(`   🎯 Темы: ${themes.join(', ')}`);
-        console.log(`   🎭 Тональность: ${tone}`);
+        console.log(`   ✅ Успешно! Создан уникальный контент.`);
 
-        // Ждем 2 секунды между запросами
+        // Пауза между запросами
         await new Promise(resolve => setTimeout(resolve, 2000));
 
       } catch (error) {
         console.log(`   ❌ Ошибка: ${error.message}`);
-        failedCount++;
-        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
-    // 7. Сохраняем результаты
+    // Сохраняем результаты
     await newWorkbook.xlsx.writeFile(outputPath);
     
-    console.log('\n🎉 ====== РЕЗУЛЬТАТЫ AI ОБРАБОТКИ ======');
+    console.log('\n🎉 ====== РЕЗУЛЬТАТЫ КАЧЕСТВЕННОЙ ОБРАБОТКИ ======');
     console.log(`📊 Обработано статей: ${processedCount}`);
-    console.log(`❌ Ошибок: ${failedCount}`);
     console.log(`📁 Файл: ${outputPath}`);
-    console.log(`💰 Примерная стоимость: $0.02 - $0.05`);
 
   } catch (error) {
     console.error('💥 Критическая ошибка:', error.message);
   }
 }
 
-// Вспомогательные функции
-function extractThemes(analysis) {
-  try {
-    const themesMatch = analysis.match(/Темы[:\s]*([^\n]+)/i);
-    return themesMatch ? themesMatch[1].split(',').slice(0, 3).map(t => t.trim()) : ['не определено'];
-  } catch (e) {
-    return ['семья', 'отношения'];
-  }
-}
-
-function extractTone(analysis) {
-  try {
-    const toneMatch = analysis.match(/Тональность[:\s]*([^\n]+)/i);
-    return toneMatch ? toneMatch[1].trim() : 'нейтральная';
-  } catch (e) {
-    return 'нейтральная';
-  }
+// Вспомогательная функция
+function extractValue(text, key) {
+  const regex = new RegExp(`${key}:\\s*([^\\n]+)`, 'i');
+  const match = text.match(regex);
+  return match ? match[1].trim() : 'не определено';
 }
 
 // Запускаем обработку
