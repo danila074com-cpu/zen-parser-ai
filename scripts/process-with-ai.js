@@ -1,4 +1,4 @@
-// scripts/process-with-ai.js - КАЧЕСТВЕННАЯ AI ОБРАБОТКА
+// scripts/process-with-ai.js - РАБОЧАЯ AI ОБРАБОТКА
 const { OpenAI } = require('openai');
 const fs = require('fs').promises;
 const path = require('path');
@@ -10,7 +10,7 @@ const openai = new OpenAI({
 
 const AI_MODEL = "gpt-3.5-turbo";
 
-console.log('🚀 Запускаем КАЧЕСТВЕННУЮ AI обработку...');
+console.log('🚀 Запускаем РАБОЧУЮ AI обработку...');
 
 async function processArticles() {
   try {
@@ -35,12 +35,12 @@ async function processArticles() {
     // Создаем папку для результатов
     const outputDir = path.join(__dirname, '../processed');
     await fs.mkdir(outputDir, { recursive: true });
-    const outputPath = path.join(outputDir, 'качественные_статьи.xlsx');
+    const outputPath = path.join(outputDir, 'рабочие_статьи.xlsx');
     
     const newWorkbook = new ExcelJS.Workbook();
-    const newWorksheet = newWorkbook.addWorksheet('Качественные статьи');
+    const newWorksheet = newWorkbook.addWorksheet('Рабочие статьи');
 
-    // Столбцы с полным текстом
+    // Столбцы
     newWorksheet.columns = [
       { header: '№', key: 'number', width: 5 },
       { header: 'Оригинальный заголовок', key: 'original_title', width: 35 },
@@ -53,7 +53,7 @@ async function processArticles() {
       { header: 'Статус', key: 'status', width: 20 }
     ];
 
-    // Обрабатываем 1 статью для теста
+    // Обрабатываем 1 статью
     let processedCount = 0;
     const maxArticles = 1;
 
@@ -69,43 +69,41 @@ async function processArticles() {
       console.log(`   📊 Оригинальный объем: ${originalWordCount} слов`);
 
       try {
-                // УЛУЧШЕННЫЙ ПРОМПТ ДЛЯ КАЧЕСТВЕННОЙ ОБРАБОТКИ
-        const qualityPrompt = `
-ПЕРЕПИШИ ЭТУ СТАТЬЮ ПОЛНОСТЬЮ, СОХРАНИВ ОСНОВНОЙ СМЫСЛ И ОБЪЕМ.
+        // ШАГ 1: СОЗДАЕМ УНИКАЛЬНЫЙ ЗАГОЛОВОК
+        console.log('   💡 Создаем уникальный заголовок...');
+        
+        const titlePrompt = `Придумай новый уникальный заголовок для этой статьи. Оригинальный заголовок: "${originalTitle}"`;
+        
+        const titleResponse = await openai.chat.completions.create({
+          model: AI_MODEL,
+          messages: [{ role: "user", content: titlePrompt }],
+          max_tokens: 100,
+          temperature: 0.7
+        });
 
-ТРЕБОВАНИЯ:
-1. Сохрани ОСНОВНУЮ ИСТОРИЮ и главную идею
-2. Сохрани примерно ТОТ ЖЕ ОБЪЕМ текста (${originalWordCount} слов ±15%)
-3. ИЗМЕНИ: имена героев, диалоги, детали, локации
-4. Сделай текст УНИКАЛЬНЫМ, но ЕСТЕСТВЕННЫМ
-5. Заголовок должен отражать суть, но быть другим
+        const uniqueTitle = titleResponse.choices[0].message.content.replace(/["']/g, '').trim();
 
-ВАЖНО: Верни ПОЛНЫЙ ТЕКСТ статьи, а не только начало!
+        // ШАГ 2: ПЕРЕПИСЫВАЕМ ПОЛНЫЙ ТЕКСТ
+        console.log('   ✍️ Переписываем полный текст статьи...');
+        
+        const textPrompt = `
+Перепиши полностью этот текст, сохраняя основную историю и смысл, но изменив имена, детали и диалоги. 
+Сохрани примерно тот же объем текста (${originalWordCount} слов).
 
-ОРИГИНАЛЬНЫЙ ЗАГОЛОВОК: "${originalTitle}"
-
-ОРИГИНАЛЬНЫЙ ТЕКСТ:
+Оригинальный текст для переработки:
 "${originalText}"
 
-ВЕРНИ ОТВЕТ В ФОРМАТЕ:
-ЗАГОЛОВОК: [твой новый заголовок]
-ТЕКСТ: [полный переписанный текст статьи]
+Верни только переписанный текст, без дополнительных комментариев.
 `;
 
-        console.log('   ✍️ Создаем качественный уникальный контент...');
-        
-        const response = await openai.chat.completions.create({
+        const textResponse = await openai.chat.completions.create({
           model: AI_MODEL,
-          messages: [{ role: "user", content: qualityPrompt }],
+          messages: [{ role: "user", content: textPrompt }],
           max_tokens: 4000,
           temperature: 0.8
         });
 
-        const result = response.choices[0].message.content;
-        
-        // Парсим результат
-        const uniqueTitle = extractValue(result, 'ЗАГОЛОВОК');
-        const uniqueText = extractValue(result, 'ТЕКСТ');
+        const uniqueText = textResponse.choices[0].message.content;
         const uniqueWordCount = uniqueText.split(/\s+/).length;
         
         const diffPercent = Math.round((uniqueWordCount - originalWordCount) / originalWordCount * 100);
@@ -119,8 +117,8 @@ async function processArticles() {
           number: i - 1,
           original_title: originalTitle,
           unique_title: uniqueTitle,
-          original_text: originalText.substring(0, 1500) + (originalText.length > 1500 ? '...' : ''),
-          unique_text: uniqueText,
+          original_text: originalText.substring(0, 1000) + (originalText.length > 1000 ? '...' : ''),
+          unique_text: uniqueText.substring(0, 1000) + (uniqueText.length > 1000 ? '...' : ''),
           original_words: originalWordCount,
           unique_words: uniqueWordCount,
           difference: volumeStatus,
@@ -128,7 +126,7 @@ async function processArticles() {
         });
 
         processedCount++;
-        console.log(`   ✅ Успешно! Создан уникальный контент.`);
+        console.log(`   ✅ Успешно! Создана уникальная статья.`);
 
         // Пауза между запросами
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -141,20 +139,13 @@ async function processArticles() {
     // Сохраняем результаты
     await newWorkbook.xlsx.writeFile(outputPath);
     
-    console.log('\n🎉 ====== РЕЗУЛЬТАТЫ КАЧЕСТВЕННОЙ ОБРАБОТКИ ======');
+    console.log('\n🎉 ====== РЕЗУЛЬТАТЫ ОБРАБОТКИ ======');
     console.log(`📊 Обработано статей: ${processedCount}`);
     console.log(`📁 Файл: ${outputPath}`);
 
   } catch (error) {
     console.error('💥 Критическая ошибка:', error.message);
   }
-}
-
-// Вспомогательная функция
-function extractValue(text, key) {
-  const regex = new RegExp(`${key}:\\s*([^\\n]+)`, 'i');
-  const match = text.match(regex);
-  return match ? match[1].trim() : 'не определено';
 }
 
 // Запускаем обработку
