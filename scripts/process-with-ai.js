@@ -117,8 +117,8 @@ async function processArticles() {
           number: i - 1,
           original_title: originalTitle,
           unique_title: uniqueTitle,
-          original_text: originalText.substring(0, 1000) + (originalText.length > 1000 ? '...' : ''),
-          unique_text: uniqueText.substring(0, 1000) + (uniqueText.length > 1000 ? '...' : ''),
+          original_text: originalText, // ПОЛНЫЙ оригинальный текст
+          unique_text: uniqueText, // ПОЛНЫЙ текст без ограничений
           original_words: originalWordCount,
           unique_words: uniqueWordCount,
           difference: volumeStatus,
