@@ -1,4 +1,4 @@
-// scripts/process-with-ai.js — версия под GPT-4o (MadeSimple style)
+// scripts/process-with-ai.js — версия с перегенерацией (MadeSimple style)
 const { OpenAI } = require('openai');
 const fs = require('fs').promises;
 const path = require('path');
@@ -50,11 +50,10 @@ async function processArticles() {
       { header: 'Ориг. слов', key: 'original_words', width: 12 },
       { header: 'Уник. слов', key: 'unique_words', width: 12 },
       { header: 'Разница', key: 'difference', width: 12 },
-      { header: 'Статус', key: 'status', width: 20 }
+      { header: 'Статус', key: 'status', width: 25 }
     ];
 
-    // Сколько статей обработать за запуск
-    const maxArticles = 4;
+    const maxArticles = 4; // Сколько статей обработать за запуск
     let processedCount = 0;
 
     for (let i = 2; i <= Math.min(worksheet.rowCount, maxArticles + 1); i++) {
@@ -65,23 +64,17 @@ async function processArticles() {
       if (!originalTitle || !originalText) continue;
 
       const originalWordCount = originalText.split(/\s+/).length;
-      console.log(`\n🔍 Обрабатываем статью: "${originalTitle.substring(0, 50)}..."`);
-      console.log(`   📏 Объём оригинала: ${originalWordCount} слов`);
+      console.log(`\n🔍 Обработка статьи: "${originalTitle.substring(0, 50)}..."`);
+      console.log(`📏 Объём оригинала: ${originalWordCount} слов`);
 
       try {
-        // === 1. Новый уникальный заголовок в том же стиле ===
-console.log('   💡 Генерируем новый заголовок в том же стиле...');
+        // === 1. Новый уникальный заголовок ===
+        console.log('💡 Генерируем новый заголовок...');
 
-const titlePrompt = `
+        const titlePrompt = `
 Ты — копирайтер, работающий в стиле канала "MadeSimple" (Яндекс Дзен).
-Твоя задача — придумать НОВЫЙ заголовок, который звучит точно в том же ритме и эмоциональном стиле, что и оригинальный.
-Не меняй тип интонации (если в оригинале прямое высказывание — оставь прямое; если интрига — оставь интригу).
-Можно заменить участников, детали и место действия, но структура и настроение должны оставаться такими же.
-Не используй западные имена, "Смитов", или темы вроде бизнеса, мотивации, успеха.
-Примеры верной трансформации:
-— "Муж ушёл, а я даже не плакала" → "Сын уехал, а я даже не проводила"
-— "Я простила свекровь, но больше к ней не поехала" → "Я приняла сестру мужа, но в гости не зову"
-— "После 50 я поняла, что устала быть удобной" → "После 40 я поняла, что больше никому ничего не должна"
+Создай новый заголовок в том же ритме, эмоциональном тоне и структуре, что и оригинал.
+Можно заменить участников, детали и место действия, но стиль должен остаться прежним.
 
 Оригинальный заголовок:
 "${originalTitle}"
@@ -89,50 +82,71 @@ const titlePrompt = `
 Верни только новый заголовок без кавычек.
 `;
 
-const titleResponse = await openai.chat.completions.create({
-  model: AI_MODEL,
-  messages: [{ role: "user", content: titlePrompt }],
-  temperature: 0.9,
-  max_tokens: 120
-});
+        const titleResponse = await openai.chat.completions.create({
+          model: AI_MODEL,
+          messages: [{ role: "user", content: titlePrompt }],
+          temperature: 0.9,
+          max_tokens: 120
+        });
 
-const uniqueTitle = titleResponse.choices[0].message.content
-  .replace(/["']/g, '')
-  .trim();
-        // === 2. Переписываем текст в том же стиле ===
-        console.log('   ✍️ Переписываем текст с сохранением сюжета...');
+        const uniqueTitle = titleResponse.choices[0].message.content
+          .replace(/["']/g, '')
+          .trim();
+
+        // === 2. Переписываем текст ===
+        console.log('✍️ Переписываем текст с сохранением сюжета...');
 
         const textPrompt = `
 Ты — опытный копирайтер и редактор в духе канала "MadeSimple" (Яндекс Дзен).
-Перепиши полностью этот рассказ, сохранив сюжет, последовательность сцен и эмоции.
-Измени имена, диалоги и детали, но не смысл.
-Не превращай историю в "мотивационную речь" или "американскую историю успеха".
-Оставь русскую атмосферу, бытовые реалии, живые диалоги и внутренние переживания героини.
-Пиши естественно, как будто текст предназначен для Дзена.
+Перепиши полностью этот рассказ, сохранив сюжет, эмоции и атмосферу.
+Измени имена, детали, но не суть.
+Пиши естественно, по-русски, без "мотиваторов" и американских оборотов.
 Объем примерно ${originalWordCount} слов.
 
 Оригинальный текст:
 """${originalText}"""
 
-Верни только готовый текст без комментариев и заголовков.
+Верни только готовый текст без комментариев.
 `;
 
-        const textResponse = await openai.chat.completions.create({
-          model: AI_MODEL,
-          messages: [{ role: "user", content: textPrompt }],
-          temperature: 0.8,
-          max_tokens: 7000
-        });
+        // Функция генерации текста (для повторного использования)
+        async function generateText(prompt) {
+          const response = await openai.chat.completions.create({
+            model: AI_MODEL,
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.8,
+            max_tokens: 7000
+          });
+          return response.choices[0].message.content.trim();
+        }
 
-        const uniqueText = textResponse.choices[0].message.content.trim();
-        const uniqueWordCount = uniqueText.split(/\s+/).length;
+        let uniqueText = await generateText(textPrompt);
+        let uniqueWordCount = uniqueText.split(/\s+/).length;
+
+        // === 3. Проверка качества ===
+        const shortOrBroken =
+          !uniqueText ||
+          uniqueWordCount < 1000 ||
+          uniqueWordCount < originalWordCount * 0.8;
+
+        let regeneration = false;
+
+        if (shortOrBroken) {
+          console.log('⚙️ Перегенерация: первая версия слишком короткая или пустая...');
+          regeneration = true;
+          uniqueText = await generateText(textPrompt);
+          uniqueWordCount = uniqueText.split(/\s+/).length;
+        }
+
+        // === 4. Подсчёт и лог ===
         const diffPercent = Math.round((uniqueWordCount - originalWordCount) / originalWordCount * 100);
         const volumeStatus = Math.abs(diffPercent) <= 15 ? '✅ Сохранен' : `⚠️ ${diffPercent}%`;
+        const finalStatus = regeneration ? '♻️ Перегенерировано' : '✅ Готово';
 
-        console.log(`   📊 Итог: ${originalWordCount} → ${uniqueWordCount} слов (${volumeStatus})`);
-        console.log(`   📝 Новый заголовок: ${uniqueTitle}`);
+        console.log(`📊 Итог: ${originalWordCount} → ${uniqueWordCount} слов (${volumeStatus})`);
+        console.log(`📝 Новый заголовок: ${uniqueTitle}`);
 
-        // === 3. Записываем в Excel и .txt ===
+        // === 5. Запись в Excel и .txt ===
         newWorksheet.addRow({
           number: i - 1,
           original_title: originalTitle,
@@ -142,21 +156,19 @@ const uniqueTitle = titleResponse.choices[0].message.content
           original_words: originalWordCount,
           unique_words: uniqueWordCount,
           difference: volumeStatus,
-          status: '✅ Готово'
+          status: finalStatus
         });
 
-        // Сохраняем .txt версию
         const safeTitle = uniqueTitle.replace(/[\\/:*?"<>|]/g, '');
         await fs.writeFile(path.join(outputDir, `${i - 1}_${safeTitle}.txt`), uniqueText, 'utf8');
 
         processedCount++;
-        console.log('   ✅ Статья успешно обработана.');
+        console.log(`✅ Статья ${i - 1} успешно обработана (${finalStatus}).`);
 
-        // Пауза для стабильности API
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 2000)); // пауза между запросами
 
       } catch (error) {
-        console.log(`   ❌ Ошибка: ${error.message}`);
+        console.log(`❌ Ошибка при обработке: ${error.message}`);
       }
     }
 
