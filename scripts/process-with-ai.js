@@ -54,7 +54,7 @@ async function processArticles() {
     ];
 
     // Сколько статей обработать за запуск
-    const maxArticles = 1;
+    const maxArticles = 4;
     let processedCount = 0;
 
     for (let i = 2; i <= Math.min(worksheet.rowCount, maxArticles + 1); i++) {
