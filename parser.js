@@ -9,7 +9,6 @@ const CHANNEL_URL = 'https://dzen.ru/id/5ae586563dceb76be76eca19?tab=articles';
 const MAX_ARTICLES = 4;
 
 const safeName = CHANNEL_NAME.replace(/[<>:"/\\|?*]/g, '_');
-// ИСПРАВЛЕННЫЙ ПУТЬ - используем process.cwd() для кроссплатформенности
 const OUTPUT_DIR = path.join(process.cwd(), 'results', 'Статьи Дзен', safeName);
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -41,7 +40,16 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     await page.setViewport({ width: 1280, height: 720 });
     
     console.log(`\n--- Открываем канал ${CHANNEL_URL} ---`);
-    await page.goto(CHANNEL_URL, { waitUntil: 'networkidle2', timeout: 60000 });
+    
+    // УЛУЧШЕННАЯ ЗАГРУЗКА КАНАЛА
+    try {
+      await page.goto(CHANNEL_URL, { waitUntil: 'domcontentloaded', timeout: 120000 });
+      await page.waitForSelector('a[data-testid="card-article-title-link"]', { timeout: 60000 });
+    } catch (err) {
+      console.log(`⚠️ Ошибка загрузки канала: ${err.message}. Повторная попытка...`);
+      await page.goto(CHANNEL_URL, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    }
+    
     await sleep(5000);
 
     // Собираем ссылки
@@ -73,7 +81,15 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
       await p.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
       
       try {
-        await p.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+        // УЛУЧШЕННАЯ ЗАГРУЗКА СТРАНИЦ С ПОВТОРНОЙ ПОПЫТКОЙ
+        try {
+          await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+          await p.waitForSelector('article, [data-testid="post-content"], .article-content, h1', { timeout: 60000 });
+        } catch (err) {
+          console.log(`⚠️ Ошибка навигации: ${err.message}. Повторная попытка...`);
+          await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+        }
+        
         await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
         await sleep(2000);
 
@@ -84,28 +100,30 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
         });
 
         let text = await p.evaluate(() => {
-          const sels = ['article p', '[data-zone-name="content"] p', 'main p'];
+          const sels = ['article p', '[data-zone-name="content"] p', 'main p', '.article-content p'];
           let parts = [];
           sels.forEach(sel => {
             document.querySelectorAll(sel).forEach(el => {
               const t = el.innerText.trim();
-              if (t) parts.push(t);
+              if (t && t.length > 10) parts.push(t); // Фильтр коротких текстов
             });
           });
           if (parts.length) return parts.join('\n\n');
           return document.querySelector('meta[name="description"]')?.content.trim() || '';
         });
 
-        if (!text) {
-          console.log('⏭ Пропущено — текст не найден');
+        if (!text || text.length < 100) {
+          console.log('⏭ Пропущено — текст не найден или слишком короткий');
         } else {
           results.push({ title, text, url });
           console.log('✅ Добавлено:', title.substring(0, 50) + '...');
+          console.log(`📏 Объем текста: ${text.split(/\s+/).length} слов`);
         }
       } catch (err) {
-        console.log('❌ Ошибка:', err.message);
+        console.log(`❌ Ошибка обработки статьи: ${err.message}`);
+      } finally {
+        await p.close();
       }
-      await p.close();
     }
 
     await browser.close();
