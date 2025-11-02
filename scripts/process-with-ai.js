@@ -1,4 +1,4 @@
-// scripts/process-with-ai.js — версия GPT-4o (MadeSimple style, фикс лимитов и 1 перегенерация)
+// scripts/process-with-ai.js — стабильная версия под GPT-4o (MadeSimple style, оптимум цена/качество)
 const { OpenAI } = require('openai');
 const fs = require('fs').promises;
 const path = require('path');
@@ -63,8 +63,9 @@ async function processArticles() {
       console.log(`   📏 Объём оригинала: ${originalWordCount} слов`);
 
       try {
-        // === 1. Новый заголовок ===
+        // === 1. Новый уникальный заголовок ===
         console.log('   💡 Генерируем новый заголовок...');
+
         const titlePrompt = `
 Ты — копирайтер в стиле "MadeSimple" (Яндекс Дзен).
 Создай НОВЫЙ заголовок, сохранив эмоциональный ритм и структуру оригинала.
@@ -87,57 +88,57 @@ async function processArticles() {
         totalInputTokens += titleResponse.usage.prompt_tokens;
         totalOutputTokens += titleResponse.usage.completion_tokens;
 
-        // === 2. Рерайт текста ===
+        // === 2. Переписываем текст ===
         console.log('   ✍️ Переписываем текст...');
+
         const textPrompt = `
 Ты — опытный копирайтер и редактор в духе канала "MadeSimple" (Яндекс Дзен).
-Перепиши рассказ, сохранив сюжет, эмоции и атмосферу, но полностью обновив формулировки.
-Измени имена, диалоги и детали, но не смысл.
-Оставь русскую атмосферу, живые диалоги и естественный ритм повествования.
-Не сокращай сюжет — текст должен быть насыщенным, как в оригинале.
-Объем нового текста: 2800–3500 слов. Если не помещается в лимит, продолжи естественно до конца истории.
+Перепиши этот рассказ полностью, сохранив сюжет, эмоции и атмосферу.
+Измени имена, диалоги и детали, но не смысл. Пиши живо и по-русски.
+Если текст длинный (3000+ слов) — можешь сжать до 80–90% от объёма, не теряя сцен.
+Объем итогового текста должен быть примерно ${Math.round(originalWordCount * 0.85)} слов.
 
 Оригинальный текст:
 """${originalText}"""
 
-Верни только готовый рассказ без заголовков и комментариев.
+Верни только готовый текст без комментариев и заголовков.
         `;
 
         const textResponse = await openai.chat.completions.create({
           model: AI_MODEL,
           messages: [{ role: "user", content: textPrompt }],
           temperature: 0.8,
-          max_tokens: 4000
+          max_tokens: 3500
         });
 
         let uniqueText = textResponse.choices[0].message.content.trim();
         totalInputTokens += textResponse.usage.prompt_tokens;
         totalOutputTokens += textResponse.usage.completion_tokens;
 
-        // === 3. Проверка и 1 перегенерация ===
-        let uniqueWordCount = uniqueText.split(/\s+/).length;
-        if (uniqueWordCount < originalWordCount * 0.6) {
+        // === 3. Проверка длины и 1 перегенерация ===
+        const uniqueWordCount = uniqueText.split(/\s+/).length;
+        if (uniqueWordCount < originalWordCount * 0.4) {
           console.log('   ⚠️ Текст слишком короткий — выполняем одну перегенерацию...');
           const regenResponse = await openai.chat.completions.create({
             model: AI_MODEL,
             messages: [
               { role: "user", content: textPrompt },
               { role: "assistant", content: uniqueText },
-              { role: "user", content: "Перепиши текст заново, добавь описания, сцены и внутренние мысли героев. Цель — довести объем до 3000–3500 слов." }
+              { role: "user", content: "Перепиши заново, сделай текст подробнее, ближе к оригинальному по объёму (около 3500 слов)." }
             ],
             temperature: 0.8,
-            max_tokens: 4000
+            max_tokens: 3500
           });
           uniqueText = regenResponse.choices[0].message.content.trim();
           totalInputTokens += regenResponse.usage.prompt_tokens;
           totalOutputTokens += regenResponse.usage.completion_tokens;
-          uniqueWordCount = uniqueText.split(/\s+/).length;
         }
 
-        const diffPercent = Math.round((uniqueWordCount - originalWordCount) / originalWordCount * 100);
+        const finalWordCount = uniqueText.split(/\s+/).length;
+        const diffPercent = Math.round((finalWordCount - originalWordCount) / originalWordCount * 100);
         const volumeStatus = Math.abs(diffPercent) <= 20 ? '✅ Сохранен' : `⚠️ ${diffPercent}%`;
 
-        console.log(`   📊 Итог: ${originalWordCount} → ${uniqueWordCount} слов (${volumeStatus})`);
+        console.log(`   📊 Итог: ${originalWordCount} → ${finalWordCount} слов (${volumeStatus})`);
         console.log(`   📝 Новый заголовок: ${uniqueTitle}`);
 
         newWorksheet.addRow({
@@ -147,7 +148,7 @@ async function processArticles() {
           original_text: originalText,
           unique_text: uniqueText,
           original_words: originalWordCount,
-          unique_words: uniqueWordCount,
+          unique_words: finalWordCount,
           difference: volumeStatus,
           status: '✅ Готово'
         });
@@ -164,7 +165,8 @@ async function processArticles() {
       }
     }
 
-    // === Стоимость ===
+    // === Подсчёт стоимости ===
+    const totalTokens = totalInputTokens + totalOutputTokens;
     const inputCost = (totalInputTokens / 1_000_000) * 2.50;
     const outputCost = (totalOutputTokens / 1_000_000) * 10.00;
     const totalCost = inputCost + outputCost;
