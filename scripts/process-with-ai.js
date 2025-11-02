@@ -1,4 +1,4 @@
-// scripts/process-with-ai.js — версия с перегенерацией (MadeSimple style)
+// scripts/process-with-ai.js — версия под GPT-4o (MadeSimple style, с учетом стоимости и 1 перегенерацией)
 const { OpenAI } = require('openai');
 const fs = require('fs').promises;
 const path = require('path');
@@ -8,9 +8,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// 🚀 Используем GPT-4o — точный, стильный, быстро работает
 const AI_MODEL = "gpt-4o";
-
 console.log('🚀 Запускаем AI-обработку статей (GPT-4o)...');
 
 async function processArticles() {
@@ -21,18 +19,15 @@ async function processArticles() {
     }
 
     const inputPath = path.join(__dirname, '../results/Статьи Дзен/Нарочно не придумаешь/Нарочно не придумаешь_articles.xlsx');
-    console.log('📁 Проверяем входной файл...');
     await fs.access(inputPath);
     console.log('✅ Файл найден!');
 
-    // Читаем Excel с оригиналами
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(inputPath);
     const worksheet = workbook.getWorksheet('Articles');
     const totalArticles = worksheet.rowCount - 1;
     console.log(`📊 Найдено статей: ${totalArticles}`);
 
-    // Создаём папку для результатов
     const outputDir = path.join(__dirname, '../processed');
     await fs.mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, 'рабочие_статьи_GPT4o.xlsx');
@@ -40,7 +35,6 @@ async function processArticles() {
     const newWorkbook = new ExcelJS.Workbook();
     const newWorksheet = newWorkbook.addWorksheet('Рабочие статьи');
 
-    // Настраиваем столбцы
     newWorksheet.columns = [
       { header: '№', key: 'number', width: 5 },
       { header: 'Оригинальный заголовок', key: 'original_title', width: 35 },
@@ -50,37 +44,38 @@ async function processArticles() {
       { header: 'Ориг. слов', key: 'original_words', width: 12 },
       { header: 'Уник. слов', key: 'unique_words', width: 12 },
       { header: 'Разница', key: 'difference', width: 12 },
-      { header: 'Статус', key: 'status', width: 25 }
+      { header: 'Статус', key: 'status', width: 20 }
     ];
 
-    const maxArticles = 4; // Сколько статей обработать за запуск
+    const maxArticles = 4;
     let processedCount = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
 
     for (let i = 2; i <= Math.min(worksheet.rowCount, maxArticles + 1); i++) {
       const row = worksheet.getRow(i);
       const originalTitle = row.getCell(1).value;
       const originalText = row.getCell(2).value;
-
       if (!originalTitle || !originalText) continue;
 
       const originalWordCount = originalText.split(/\s+/).length;
-      console.log(`\n🔍 Обработка статьи: "${originalTitle.substring(0, 50)}..."`);
-      console.log(`📏 Объём оригинала: ${originalWordCount} слов`);
+      console.log(`\n🔍 Обрабатываем статью: "${originalTitle.substring(0, 50)}..."`);
+      console.log(`   📏 Объём оригинала: ${originalWordCount} слов`);
 
       try {
         // === 1. Новый уникальный заголовок ===
-        console.log('💡 Генерируем новый заголовок...');
+        console.log('   💡 Генерируем новый заголовок...');
 
         const titlePrompt = `
-Ты — копирайтер, работающий в стиле канала "MadeSimple" (Яндекс Дзен).
-Создай новый заголовок в том же ритме, эмоциональном тоне и структуре, что и оригинал.
-Можно заменить участников, детали и место действия, но стиль должен остаться прежним.
+Ты — копирайтер в стиле "MadeSimple" (Яндекс Дзен).
+Создай НОВЫЙ заголовок, сохранив эмоциональный ритм и структуру оригинала.
+Измени детали, но не тип интриги. Без западных имён и мотивов успеха.
 
 Оригинальный заголовок:
 "${originalTitle}"
 
 Верни только новый заголовок без кавычек.
-`;
+        `;
 
         const titleResponse = await openai.chat.completions.create({
           model: AI_MODEL,
@@ -89,64 +84,65 @@ async function processArticles() {
           max_tokens: 120
         });
 
-        const uniqueTitle = titleResponse.choices[0].message.content
-          .replace(/["']/g, '')
-          .trim();
+        const uniqueTitle = titleResponse.choices[0].message.content.replace(/["']/g, '').trim();
+        totalInputTokens += titleResponse.usage.prompt_tokens;
+        totalOutputTokens += titleResponse.usage.completion_tokens;
 
         // === 2. Переписываем текст ===
-        console.log('✍️ Переписываем текст с сохранением сюжета...');
+        console.log('   ✍️ Переписываем текст...');
 
         const textPrompt = `
 Ты — опытный копирайтер и редактор в духе канала "MadeSimple" (Яндекс Дзен).
-Перепиши полностью этот рассказ, сохранив сюжет, эмоции и атмосферу.
-Измени имена, детали, но не суть.
-Пиши естественно, по-русски, без "мотиваторов" и американских оборотов.
-Объем примерно ${originalWordCount} слов.
+Перепиши этот рассказ, сохранив сюжет, эмоции и атмосферу, но полностью обновив формулировки.
+Измени имена, диалоги и детали, но не смысл.
+Оставь русскую атмосферу, бытовые реалии, живые диалоги и естественный ритм повествования.
+Пиши в реалистичном стиле Дзена.
+Если текст слишком длинный — можешь сжать его, оставив ключевые сцены и эмоции.
+Итоговый объём: примерно 3000–3500 слов.
 
 Оригинальный текст:
 """${originalText}"""
 
-Верни только готовый текст без комментариев.
-`;
+Верни только готовый текст без комментариев и заголовков.
+        `;
 
-        // Функция генерации текста (для повторного использования)
-        async function generateText(prompt) {
-          const response = await openai.chat.completions.create({
+        const textResponse = await openai.chat.completions.create({
+          model: AI_MODEL,
+          messages: [{ role: "user", content: textPrompt }],
+          temperature: 0.8,
+          max_tokens: 2000
+        });
+
+        let uniqueText = textResponse.choices[0].message.content.trim();
+        totalInputTokens += textResponse.usage.prompt_tokens;
+        totalOutputTokens += textResponse.usage.completion_tokens;
+
+        // === Проверка объёма и 1 перегенерация ===
+        const uniqueWordCount = uniqueText.split(/\s+/).length;
+        if (uniqueWordCount < originalWordCount * 0.4) {
+          console.log('   ⚠️ Текст слишком короткий — выполняем одну перегенерацию...');
+          const regenResponse = await openai.chat.completions.create({
             model: AI_MODEL,
-            messages: [{ role: "user", content: prompt }],
+            messages: [
+              { role: "user", content: textPrompt },
+              { role: "assistant", content: uniqueText },
+              { role: "user", content: "Перепиши текст заново, сделай его подробнее и ближе по объёму к оригиналу (до 3500 слов)." }
+            ],
             temperature: 0.8,
-            max_tokens: 7000
+            max_tokens: 2000
           });
-          return response.choices[0].message.content.trim();
+          uniqueText = regenResponse.choices[0].message.content.trim();
+          totalInputTokens += regenResponse.usage.prompt_tokens;
+          totalOutputTokens += regenResponse.usage.completion_tokens;
         }
 
-        let uniqueText = await generateText(textPrompt);
-        let uniqueWordCount = uniqueText.split(/\s+/).length;
+        const finalWordCount = uniqueText.split(/\s+/).length;
+        const diffPercent = Math.round((finalWordCount - originalWordCount) / originalWordCount * 100);
+        const volumeStatus = Math.abs(diffPercent) <= 20 ? '✅ Сохранен' : `⚠️ ${diffPercent}%`;
 
-        // === 3. Проверка качества ===
-        const shortOrBroken =
-          !uniqueText ||
-          uniqueWordCount < 1000 ||
-          uniqueWordCount < originalWordCount * 0.8;
+        console.log(`   📊 Итог: ${originalWordCount} → ${finalWordCount} слов (${volumeStatus})`);
+        console.log(`   📝 Новый заголовок: ${uniqueTitle}`);
 
-        let regeneration = false;
-
-        if (shortOrBroken) {
-          console.log('⚙️ Перегенерация: первая версия слишком короткая или пустая...');
-          regeneration = true;
-          uniqueText = await generateText(textPrompt);
-          uniqueWordCount = uniqueText.split(/\s+/).length;
-        }
-
-        // === 4. Подсчёт и лог ===
-        const diffPercent = Math.round((uniqueWordCount - originalWordCount) / originalWordCount * 100);
-        const volumeStatus = Math.abs(diffPercent) <= 15 ? '✅ Сохранен' : `⚠️ ${diffPercent}%`;
-        const finalStatus = regeneration ? '♻️ Перегенерировано' : '✅ Готово';
-
-        console.log(`📊 Итог: ${originalWordCount} → ${uniqueWordCount} слов (${volumeStatus})`);
-        console.log(`📝 Новый заголовок: ${uniqueTitle}`);
-
-        // === 5. Запись в Excel и .txt ===
         newWorksheet.addRow({
           number: i - 1,
           original_title: originalTitle,
@@ -154,29 +150,39 @@ async function processArticles() {
           original_text: originalText,
           unique_text: uniqueText,
           original_words: originalWordCount,
-          unique_words: uniqueWordCount,
+          unique_words: finalWordCount,
           difference: volumeStatus,
-          status: finalStatus
+          status: '✅ Готово'
         });
 
         const safeTitle = uniqueTitle.replace(/[\\/:*?"<>|]/g, '');
         await fs.writeFile(path.join(outputDir, `${i - 1}_${safeTitle}.txt`), uniqueText, 'utf8');
 
         processedCount++;
-        console.log(`✅ Статья ${i - 1} успешно обработана (${finalStatus}).`);
-
-        await new Promise(resolve => setTimeout(resolve, 2000)); // пауза между запросами
+        console.log('   ✅ Статья успешно обработана.');
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
       } catch (error) {
-        console.log(`❌ Ошибка при обработке: ${error.message}`);
+        console.log(`   ❌ Ошибка: ${error.message}`);
       }
     }
 
-    // === Сохраняем результат ===
+    // === Подсчёт стоимости ===
+    const totalTokens = totalInputTokens + totalOutputTokens;
+    const inputCost = (totalInputTokens / 1_000_000) * 2.50;   // $2.50 за 1M input tokens (GPT-4o)
+    const outputCost = (totalOutputTokens / 1_000_000) * 10.00; // $10.00 за 1M output tokens
+    const totalCost = inputCost + outputCost;
+    const avgCost = processedCount ? totalCost / processedCount : 0;
+
     await newWorkbook.xlsx.writeFile(outputPath);
+
     console.log('\n🎉 ====== ГОТОВО ======');
     console.log(`📊 Обработано статей: ${processedCount}`);
     console.log(`📁 Файл: ${outputPath}`);
+    console.log('💰 ====== РАСХОДЫ ======');
+    console.log(`🔹 Входные токены: ${totalInputTokens.toLocaleString()} (~$${inputCost.toFixed(4)})`);
+    console.log(`🔹 Выходные токены: ${totalOutputTokens.toLocaleString()} (~$${outputCost.toFixed(4)})`);
+    console.log(`💵 Итого: ~$${totalCost.toFixed(4)} (≈ $${avgCost.toFixed(4)} за статью)`);
 
   } catch (error) {
     console.error('💥 Критическая ошибка:', error.message);
