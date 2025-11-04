@@ -1,4 +1,4 @@
-// scripts/process-with-ai.js — версия с промтом "Про Жизнь и Счастье" без обложек
+// scripts/process-with-ai.js — версия без обложек, с новым промтом "Про жизнь и счастье"
 const { OpenAI } = require("openai");
 const fs = require("fs").promises;
 const path = require("path");
@@ -6,7 +6,7 @@ const ExcelJS = require("exceljs");
 
 // Инициализация OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 const AI_MODEL = "gpt-4o";
@@ -19,6 +19,7 @@ async function processArticles() {
       throw new Error("OPENAI_API_KEY не настроен");
     }
 
+    // Путь к исходному файлу
     const inputPath = path.join(
       __dirname,
       "../results/Статьи Дзен/Нарочно не придумаешь/Нарочно не придумаешь_articles.xlsx"
@@ -27,29 +28,31 @@ async function processArticles() {
     await fs.access(inputPath);
     console.log("✅ Файл найден!");
 
+    // Загружаем Excel
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(inputPath);
     const worksheet = workbook.getWorksheet("Articles");
     const totalArticles = worksheet.rowCount - 1;
     console.log(`📊 Найдено статей: ${totalArticles}`);
 
+    // Подготовка выходной директории
     const outputDir = path.join(__dirname, "../processed");
     await fs.mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, "рабочие_статьи_GPT4o.xlsx");
 
+    // Создание нового Excel
     const newWorkbook = new ExcelJS.Workbook();
     const newWorksheet = newWorkbook.addWorksheet("Рабочие статьи");
-
     newWorksheet.columns = [
       { header: "№", key: "number", width: 5 },
       { header: "Оригинальный заголовок", key: "original_title", width: 35 },
-      { header: "Уникальный заголовок", key: "unique_title", width: 45 },
+      { header: "Уникальный заголовок", key: "unique_title", width: 35 },
       { header: "Оригинальный текст", key: "original_text", width: 80 },
       { header: "Уникальный текст", key: "unique_text", width: 80 },
       { header: "Ориг. слов", key: "original_words", width: 12 },
       { header: "Уник. слов", key: "unique_words", width: 12 },
       { header: "Разница", key: "difference", width: 12 },
-      { header: "Статус", key: "status", width: 15 }
+      { header: "Статус", key: "status", width: 15 },
     ];
 
     const maxArticles = 4;
@@ -72,96 +75,76 @@ async function processArticles() {
       let uniqueText = "";
 
       try {
-        // === 1. Генерация заголовка по шаблону "Про Жизнь и Счастье" ===
+        // === 1. Генерация заголовка ===
         console.log("   💡 Генерируем заголовок...");
         const titlePrompt = `
-Ты — копирайтер в стиле Яндекс Дзена, создающий заголовки в духе канала «Про Жизнь и Счастье».
-
-Вот стиль и шаблоны, на которые ориентируйся:
-
-1. Используй яркое, эмоциональное высказывание или прямую речь — с элементом диалога или внутренней реплики героя.
-2. Добавляй интригу, конфликт или необычную бытовую ситуацию.
-3. Упоминай отношения, делёж имущества, резкие заявления, обиды, шокирующие требования.
-4. Не бойся длинных заголовков с прямым обращением или восклицанием.
+Создай эмоциональный, интригующий заголовок в стиле Дзен-канала «Про Жизнь и Счастье».
+Используй прямую речь, бытовой или семейный конфликт, добавь эмоции и интригу.
+Оригинальный заголовок: "${originalTitle}"
 
 Примеры:
-- «— Я не для того впахивала на двух работах, чтобы ты мою квартиру кому-то подарил!»
-- «— Ты вообще в своём уме? — спросила я, когда муж заявил, что мама поживёт с нами!»
-- «— Мы разводимся и поделим всё. Даже твою квартиру! — сказал он с холодной улыбкой.»
+- "— Я не для того впахивала на двух работах, чтобы ты мою квартиру кому-то подарил!"
+- "— Ты что, совсем с ума сошла? — сказал муж, когда я показала ему подарок."
+- "— А с какой радости я должна терпеть твою мать у нас в квартире?"
 
-Задача:
-Создай новый заголовок в этом стиле для статьи с исходным заголовком:
-"${originalTitle}"
-
-Пиши живо, эмоционально, с конфликтом, в формате прямой речи или внутреннего монолога.
-Верни ТОЛЬКО готовый заголовок без комментариев.
-        `;
-
+Выведи ТОЛЬКО готовый заголовок.`;
         const titleResponse = await openai.chat.completions.create({
           model: AI_MODEL,
           messages: [{ role: "user", content: titlePrompt }],
-          temperature: 0.9,
-          max_tokens: 150
+          temperature: 0.8,
+          max_tokens: 150,
         });
 
         uniqueTitle = titleResponse.choices[0].message.content.trim();
-        totalInputTokens += titleResponse.usage?.prompt_tokens || 0;
-        totalOutputTokens += titleResponse.usage?.completion_tokens || 0;
+        totalInputTokens += titleResponse.usage.prompt_tokens;
+        totalOutputTokens += titleResponse.usage.completion_tokens;
 
-        // === 2. Этап 1: Краткое summary ===
+        // === 2. Генерация текста по мотивам оригинала ===
         console.log("   ✍️ Этап 1: создаем краткое резюме...");
-        const summaryResponse = await openai.chat.completions.create({
-          model: AI_MODEL,
-          messages: [{
-            role: "user",
-            content: `Сократи эту статью до сценарного конспекта (summary) на 600–800 слов.
-Опиши всех героев, события и эмоциональные повороты. Без художественных деталей.
+        const shortSummary = originalText.substring(0, 500);
 
-Текст:
-"""
-${originalText}
-"""
-Верни только summary без комментариев.`
-          }],
-          temperature: 0.5,
-          max_tokens: 1500
-        });
-
-        const summaryText = summaryResponse.choices[0].message.content.trim();
-        totalInputTokens += summaryResponse.usage?.prompt_tokens || 0;
-        totalOutputTokens += summaryResponse.usage?.completion_tokens || 0;
-
-        // === 3. Этап 2: Полный рассказ в стиле MadeSimple ===
         console.log("   ✍️ Этап 2: пишем рассказ...");
-        const rewriteResponse = await openai.chat.completions.create({
+        const storyPrompt = `
+Ты профессиональный копирайтер и редактор.
+Напиши рассказ-историю в стиле канала «Про Жизнь и Счастье» (Дзен):
+
+Исходные данные (идея и настроение):
+"${originalTitle}"
+"${shortSummary}"
+
+ТРЕБОВАНИЯ:
+- Создай абсолютно новый сюжет, основанный на тех же эмоциях и типе конфликта.
+- Используй реалистичные бытовые сцены и живые диалоги.
+- Добавь внутренние монологи и наблюдения героя.
+- Сразу введи конфликт или проблему в первой сцене.
+- Ритм — динамичный, язык простой и разговорный.
+- Герои — обычные люди: муж, жена, свекровь, дочь, сосед, коллега.
+- В конце добавь мораль или размышление, как в статьях «Про Жизнь и Счастье».
+- Объем: не менее 3000 слов (≈18 000–20 000 символов).
+
+Пример начала:
+"Хорошо, что ты дома. Я за ключами, — сухо произнесла свекровь..."
+Пример финала:
+"С того дня многое изменилось, но одну вещь поняла точно — иногда лучше сказать правду сразу."
+
+Выведи ТОЛЬКО готовый рассказ с заголовком в начале.`;
+
+        const textResponse = await openai.chat.completions.create({
           model: AI_MODEL,
-          messages: [{
-            role: "user",
-            content: `На основе этого сценарного конспекта напиши полноценный рассказ для Дзена в стиле "MadeSimple".
-Требования:
-- Реалистичный, эмоциональный стиль, будто из жизни.
-- Диалоги живые, без шаблонов.
-- Добавь внутренние монологи, атмосферу, бытовые детали.
-- Объем не менее 3000 слов.
-- Разбей на абзацы, чтобы удобно читать.
-
-Summary:
-"""
-${summaryText}
-"""
-
-Верни только готовый рассказ без комментариев.`
-          }],
-          temperature: 0.7,
-          max_tokens: 3500
+          messages: [{ role: "user", content: storyPrompt }],
+          temperature: 0.8,
+          max_tokens: 7000,
         });
 
-        uniqueText = rewriteResponse.choices[0].message.content.trim();
-        totalInputTokens += rewriteResponse.usage?.prompt_tokens || 0;
-        totalOutputTokens += rewriteResponse.usage?.completion_tokens || 0;
+        uniqueText = textResponse.choices[0].message.content.trim();
+        totalInputTokens += textResponse.usage.prompt_tokens;
+        totalOutputTokens += textResponse.usage.completion_tokens;
 
+        // === 3. Подсчёт и сохранение ===
         const finalWordCount = uniqueText.split(/\s+/).length;
-        const diffPercent = Math.round((finalWordCount - originalWordCount) / originalWordCount * 100);
+        const diffPercent = Math.round(
+          ((finalWordCount - originalWordCount) / originalWordCount) * 100
+        );
 
         newWorksheet.addRow({
           number: i - 1,
@@ -172,9 +155,10 @@ ${summaryText}
           original_words: originalWordCount,
           unique_words: finalWordCount,
           difference: `${diffPercent}%`,
-          status: "✅ Готово"
+          status: "✅ Готово",
         });
 
+        // Сохранение текстового файла
         const safeTitle = uniqueTitle.replace(/[\\/:*?"<>|]/g, "");
         await fs.writeFile(
           path.join(outputDir, `${i - 1}_${safeTitle}.txt`),
@@ -184,18 +168,18 @@ ${summaryText}
 
         processedCount++;
         console.log(`   ✅ Готово: ${originalWordCount} → ${finalWordCount} слов`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       } catch (error) {
         console.log(`   ❌ Ошибка: ${error.message}`);
       }
     }
 
+    // Сохраняем Excel
     await newWorkbook.xlsx.writeFile(outputPath);
 
-    // === Итоговая статистика ===
-    const inputCost = (totalInputTokens / 1_000_000) * 2.50;
-    const outputCost = (totalOutputTokens / 1_000_000) * 10.00;
+    // === Финальная статистика ===
+    const inputCost = (totalInputTokens / 1_000_000) * 2.5;
+    const outputCost = (totalOutputTokens / 1_000_000) * 10.0;
     const totalCost = inputCost + outputCost;
 
     console.log("\n🎉 ====== ГОТОВО ======");
@@ -205,7 +189,6 @@ ${summaryText}
     console.log(`🔹 Входные токены: ${totalInputTokens.toLocaleString()} (~$${inputCost.toFixed(4)})`);
     console.log(`🔹 Выходные токены: ${totalOutputTokens.toLocaleString()} (~$${outputCost.toFixed(4)})`);
     console.log(`💵 Итого: ~$${totalCost.toFixed(4)}`);
-
   } catch (error) {
     console.error("💥 Критическая ошибка:", error.message);
     process.exit(1);
