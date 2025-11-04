@@ -9,11 +9,18 @@
     "full-pipeline": "node parser.js && node scripts/process-with-ai.js"
   },
   "dependencies": {
-    "puppeteer": "^20.9.0",
+    "axios": "^1.13.1",
     "exceljs": "^4.4.0",
-    "openai": "^4.20.0"
+    "openai": "^4.20.0",
+    "puppeteer": "^20.9.0",
+    "axios": "^1.6.0"
   },
-  "keywords": ["parser", "ai", "articles", "automation"],
+  "keywords": [
+    "parser",
+    "ai",
+    "articles",
+    "automation"
+  ],
   "author": "Your Name",
   "license": "MIT"
 }
