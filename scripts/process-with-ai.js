@@ -1,4 +1,4 @@
-// scripts/process-with-ai.js — ЭКОНОМНАЯ версия (двухэтапный рерайт)
+// scripts/process-with-ai.js — ЭКОНОМНАЯ версия с автодополнением
 const { OpenAI } = require("openai");
 const fs = require("fs").promises;
 const path = require("path");
@@ -10,7 +10,7 @@ const openai = new OpenAI({
 
 const AI_MODEL = "gpt-4o";
 
-console.log("🚀 Запускаем AI-обработку статей (GPT-4o, двухэтапный рерайт)...");
+console.log("🚀 Запускаем AI-обработку статей (GPT-4o с автодополнением)...");
 
 async function processArticles() {
   try {
@@ -92,7 +92,7 @@ async function processArticles() {
           model: AI_MODEL,
           messages: [{
             role: "user",
-            content: `Перепиши этот текст в стиле Дзен (~2000 слов):\n\n${originalText}`
+            content: `Перепиши этот текст в стиле Дзен (~2500 слов):\n\n${originalText}`
           }],
           max_tokens: 3000,
           temperature: 0.7
@@ -102,7 +102,39 @@ async function processArticles() {
         totalInputTokens += textResponse.usage.prompt_tokens;
         totalOutputTokens += textResponse.usage.completion_tokens;
 
-        const finalWordCount = uniqueText.split(/\s+/).length;
+        // === 🔥 АВТОДОПОЛНЕНИЕ ПРИ НЕДОСТАТОЧНОМ ОБЪЕМЕ ===
+        let finalWordCount = uniqueText.split(/\s+/).length;
+        const MIN_WORDS = 2500; // Минимальный порог
+
+        if (finalWordCount < MIN_WORDS) {
+          console.log(`   ⚠️ Текст короткий (${finalWordCount} слов). Выполняем расширение...`);
+
+          const expandResponse = await openai.chat.completions.create({
+            model: AI_MODEL,
+            messages: [{
+              role: "user",
+              content: `
+Текст получился короче требуемого размера.
+Дополни его естественно: добавь бытовые сцены, эмоции, диалоги и внутренние мысли.
+Не меняй сюжет и структуру.
+
+Текст:
+"""${uniqueText}"""
+              `
+            }],
+            max_tokens: 2000,
+            temperature: 0.7
+          });
+
+          uniqueText = expandResponse.choices[0].message.content.trim();
+          totalInputTokens += expandResponse.usage?.prompt_tokens || 0;
+          totalOutputTokens += expandResponse.usage?.completion_tokens || 0;
+          finalWordCount = uniqueText.split(/\s+/).length;
+
+          console.log(`   ✅ После расширения: ${finalWordCount} слов`);
+        }
+        // === 🔥 КОНЕЦ АВТОДОПОЛНЕНИЯ ===
+
         const diffPercent = Math.round((finalWordCount - originalWordCount) / originalWordCount * 100);
 
         newWorksheet.addRow({
@@ -122,7 +154,6 @@ async function processArticles() {
 
         processedCount++;
         console.log(`   ✅ Готово: ${finalWordCount} слов`);
-        
         await new Promise(resolve => setTimeout(resolve, 1500));
 
       } catch (error) {
