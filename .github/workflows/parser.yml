@@ -28,19 +28,5 @@ jobs:
         echo "=== ЗАПУСК PARSER ==="
         node parser.js
         
-    - name: 🧠 AI Обработка статей
-      run: |
-        echo "=== ЗАПУСК AI ОБРАБОТКИ ==="
-        node scripts/process-with-ai.js
-      env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
-        
-    - name: 📤 Upload results
-      uses: actions/upload-artifact@v4
-      with:
-        name: zen-articles
-        path: |
-          results/
-          processed/
-        retention-days: 7
+
+   
